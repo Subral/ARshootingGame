@@ -1,0 +1,632 @@
+<!-- <!DOCTYPE html>
+<html>
+
+<head>
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <script src="https://aframe.io/releases/1.6.0/aframe-ar.js"></script>
+  <script>
+    AFRAME.registerComponent('device-motion-controls', {
+      init: function () {
+        this.acceleration = new THREE.Vector3(0, 0, 0);
+        this.velocity = new THREE.Vector3(0, 0, 0);
+        this.position = new THREE.Vector3(0, 2, 10);
+
+        window.addEventListener('devicemotion', (event) => {
+          this.acceleration.x = event.accelerationIncludingGravity.x * 0.1;
+          this.acceleration.z = -event.accelerationIncludingGravity.y * 0.1;
+        });
+      },
+
+      tick: function (time, deltaTime) {
+        // Update velocity
+        this.velocity.add(this.acceleration);
+
+        // Apply some damping
+        this.velocity.multiplyScalar(0.95);
+
+        // Update position
+        this.position.add(this.velocity);
+
+        // Constrain movement to a certain area
+        this.position.x = THREE.MathUtils.clamp(this.position.x, -10, 10);
+        this.position.z = THREE.MathUtils.clamp(this.position.z, -10, 30);
+
+        // Update camera position
+        this.el.setAttribute('position', this.position);
+      }
+    });
+
+
+    AFRAME.registerComponent('always-face-camera', {
+      tick: function () {
+        var worldPos = new THREE.Vector3();
+        this.el.object3D.getWorldPosition(worldPos);
+        this.el.object3D.lookAt(this.el.sceneEl.camera.getWorldPosition(new THREE.Vector3()));
+        this.el.object3D.rotation.y += Math.PI; // Rotate 180 degrees to face the camera
+      }
+    });
+
+    AFRAME.registerComponent('camera-movement', {
+      schema: {
+        speed: { type: 'number', default: 0.1 }
+      },
+      init: function () {
+        this.moveForward = false;
+        this.moveBackward = false;
+
+        window.addEventListener('keydown', (e) => {
+          if (e.key === 'w' || e.key === 'ArrowUp') {
+            this.moveForward = true;
+          }
+          if (e.key === 's' || e.key === 'ArrowDown') {
+            this.moveBackward = true;
+          }
+        });
+
+        window.addEventListener('keyup', (e) => {
+          if (e.key === 'w' || e.key === 'ArrowUp') {
+            this.moveForward = false;
+          }
+          if (e.key === 's' || e.key === 'ArrowDown') {
+            this.moveBackward = false;
+          }
+        });
+      },
+      tick: function () {
+        const camera = this.el.sceneEl.camera.el;
+        const position = camera.getAttribute('position');
+
+        // Move forward (towards the z direction)
+        if (this.moveForward) {
+          position.z -= this.data.speed;
+        }
+
+        // Move backward (away from the z direction)
+        if (this.moveBackward) {
+          position.z += this.data.speed;
+        }
+
+        // Update camera position
+        camera.setAttribute('position', position);
+      }
+    });
+  </script>
+</head>
+
+<body>
+  <a-scene>
+    <a-text id="timer"
+      value="Time: 60"
+      position="-3 7 -2"
+      color="#FFF"
+      width="10"></a-text>
+    <a-text id="score"
+      value="Score: 0"
+      position="0 7 -2"
+      color="#FFF"
+      width="10"></a-text>
+    <a-text id="ballsUsed"
+      value="Balls Used: 0"
+      position="3 7 -2"
+      color="#FFF"
+      width="10"></a-text>
+    <a-text id="timeUp"
+      value="Time Up!"
+      position="0 4 -5"
+      color="#FF0000"
+      width="40"
+      align="center"
+      visible="false"></a-text>
+    <a-text id="finalScore"
+      value=""
+      position="0 2 -5"
+      color="#FFD700"
+      width="20"
+      align="center"
+      visible="false"></a-text>
+    <a-sky src="ASSETS/sky.jpg"></a-sky>
+
+    <a-entity camera
+      look-controls
+      device-motion-controls
+      position="0 2 10">
+      <a-entity cursor="fuse: false; fuseTimeout: 500"
+        position="0 0 -1"
+        geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03"
+        material="color: red; shader: flat">
+      </a-entity>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    let score = 0;
+    let ballsUsed = 0;
+    let timeLeft = 60;
+    let gameActive = true;
+    const maxBalls = 10; // Maximum number of active balls
+    const ballPool = []; // Pool of reusable balls
+    let lastShotTime = 0;
+    const shootCooldown = 200; // Cooldown in milliseconds between shots
+
+    // Create and initialize ball pool
+    for (let i = 0; i < maxBalls; i++) {
+      const ball = document.createElement('a-sphere');
+      ball.setAttribute('radius', '0.2');
+      ball.setAttribute('color', '#6c75e0');
+      ball.setAttribute('visible', 'false'); // Hide the ball initially
+      document.querySelector('a-scene').appendChild(ball);
+      ballPool.push(ball);
+    }
+
+    function getAvailableBall() {
+      return ballPool.find(ball => !ball.getAttribute('visible'));
+    }
+
+    function spawnTarget() {
+      const target = document.createElement('a-entity');
+      const image = document.createElement('a-image');
+      image.setAttribute('src', 'ASSETS/icon-128.png');
+      image.setAttribute('width', '3');
+      image.setAttribute('height', '3');
+      target.appendChild(image);
+      target.setAttribute('always-face-camera', '');
+
+      // Random initial position
+      const x = (Math.random() < 0.5 ? -1 : 1) * (Math.random() * 5 + 5); // x: [-10, -5] or [5, 10]
+      const y = (Math.random() < 0.5 ? -1 : 1) * (Math.random() * 5 + 5); // y: [-10, -5] or [5, 10]
+
+      // Bias towards positive z values
+      const zBias = Math.random() < 0.7 ? 1 : -1;
+      const z = zBias * (Math.random() * 10 + 10); // z: [-20, -10] or [10, 20]
+      target.setAttribute('position', `${x} ${y} ${z}`);
+
+      // Random movement range
+      const moveX = (Math.random() - 0.5) * 30;
+      const moveY = (Math.random() - 0.5) * 30;
+      const moveZ = (Math.random() - 0.5) * 30;
+
+      // Set animation to move within the generated area
+      target.setAttribute('animation', `
+          property: position; 
+          from: ${x} ${y} ${z}; 
+          to: ${x + moveX} ${y + moveY} ${z + moveZ}; 
+          dur: 3000; 
+          easing: linear; 
+          dir: alternate;
+          loop: true;
+        `);
+
+      document.querySelector('a-scene').appendChild(target);
+    }
+
+    // Spawn initial targets
+    for (let i = 0; i < 5; i++) {
+      spawnTarget();
+    }
+
+    document.addEventListener('keydown', function (event) {
+      if (event.code === 'Space' && gameActive) {
+        shootBall();
+      }
+    });
+
+    document.addEventListener('touchstart', function (event) {
+      if (gameActive) {
+        shootBall();
+      }
+    });
+
+    function shootBall() {
+      const currentTime = new Date().getTime();
+      if (currentTime - lastShotTime < shootCooldown) {
+        return; // Enforce cooldown
+      }
+      lastShotTime = currentTime;
+
+      ballsUsed++;
+      updateBallsUsed();
+
+      const ball = getAvailableBall();
+      if (!ball) {
+        return; // No available balls, return early
+      }
+
+      const camera = document.querySelector('[camera]');
+      const cameraPosition = camera.getAttribute('position');
+      const direction = new THREE.Vector3(0, 0, -1);
+      direction.applyQuaternion(camera.object3D.quaternion);
+
+      ball.setAttribute('position', cameraPosition);
+      ball.setAttribute('visible', 'true');
+
+      let distanceTraveled = 0;
+      const minimumDistanceBeforeCollisionCheck = 7;
+
+      function moveBall() {
+        if (!gameActive) {
+          ball.setAttribute('visible', 'false');
+          return;
+        }
+
+        const currentPosition = new THREE.Vector3();
+        ball.object3D.getWorldPosition(currentPosition);
+        currentPosition.add(direction.clone().multiplyScalar(0.4));
+        ball.setAttribute('position', currentPosition);
+
+        distanceTraveled += 0.4;
+
+        if (distanceTraveled > minimumDistanceBeforeCollisionCheck) {
+          const raycaster = new THREE.Raycaster(currentPosition, direction);
+          const intersects = raycaster.intersectObjects(document.querySelector('a-scene').object3D.children, true);
+
+          if (intersects.length > 0) {
+            const hitObject = intersects[0].object.el;
+            if (hitObject && (hitObject.tagName === 'A-IMAGE' || hitObject.tagName === 'A-ENTITY')) {
+              const targetEntity = hitObject.tagName === 'A-IMAGE' ? hitObject.parentNode : hitObject;
+              targetEntity.parentNode.removeChild(targetEntity);
+              ball.setAttribute('visible', 'false');
+              updateScore();
+              spawnTarget(); // Spawn a new target when one is hit
+              return;
+            }
+          }
+        }
+
+        if (currentPosition.length() > 50) {
+          ball.setAttribute('visible', 'false');
+          return;
+        }
+
+        requestAnimationFrame(moveBall);
+      }
+
+      requestAnimationFrame(moveBall);
+    }
+
+    function updateScore() {
+      score++;
+      const scoreText = document.getElementById('score');
+      scoreText.setAttribute('value', 'Score: ' + score);
+    }
+
+    function updateBallsUsed() {
+      const ballsUsedText = document.getElementById('ballsUsed');
+      ballsUsedText.setAttribute('value', 'Balls Used: ' + ballsUsed);
+    }
+
+    const timerInterval = setInterval(function () {
+      timeLeft--;
+      const timerText = document.getElementById('timer');
+      timerText.setAttribute('value', 'Time: ' + timeLeft);
+
+      if (timeLeft <= 0) {
+        clearInterval(timerInterval);
+        endGame();
+      }
+    }, 1000);
+
+    function endGame() {
+      gameActive = false;
+
+      // Hide all game elements
+      document.getElementById('timer').setAttribute('visible', 'false');
+      document.getElementById('score').setAttribute('visible', 'false');
+      document.getElementById('ballsUsed').setAttribute('visible', 'false');
+
+      // Hide all targets and balls
+      const targets = document.querySelectorAll('a-entity[always-face-camera]');
+      targets.forEach(target => target.setAttribute('visible', 'false'));
+      ballPool.forEach(ball => ball.setAttribute('visible', 'false'));
+
+      // Show "Time's Up" heading
+      const timeUpText = document.getElementById('timeUp');
+      timeUpText.setAttribute('visible', 'true');
+
+      // Show final score
+      const finalScoreText = document.getElementById('finalScore');
+      finalScoreText.setAttribute('value', 'Final Score: ' + score);
+      finalScoreText.setAttribute('visible', 'true');
+
+      // Optional: Add a replay button
+      addReplayButton();
+    }
+
+    function addReplayButton() {
+      const replayButton = document.createElement('a-entity');
+      replayButton.setAttribute('geometry', { primitive: 'plane', width: 2, height: 0.5 });
+      replayButton.setAttribute('material', { color: '#4CAF50' });
+      replayButton.setAttribute('position', '0 0 -5');
+      replayButton.setAttribute('text', { value: 'Play Again', align: 'center', color: '#FFFFFF' });
+      replayButton.setAttribute('always-face-camera', '');
+      replayButton.setAttribute('class', 'clickable');
+
+      replayButton.addEventListener('click', restartGame);
+
+      document.querySelector('a-scene').appendChild(replayButton);
+    }
+
+    function restartGame() {
+      // Reset game variables
+      score = 0;
+      ballsUsed = 0;
+      timeLeft = 60;
+      gameActive = true;
+
+      // Reset UI
+      document.getElementById('timer').setAttribute('visible', 'true');
+      document.getElementById('score').setAttribute('visible', 'true');
+      document.getElementById('ballsUsed').setAttribute('visible', 'true');
+      document.getElementById('timeUp').setAttribute('visible', 'false');
+      document.getElementById('finalScore').setAttribute('visible', 'false');
+
+      // Remove replay button
+      const replayButton = document.querySelector('.clickable');
+      if (replayButton) {
+        replayButton.parentNode.removeChild(replayButton);
+      }
+
+      // Respawn targets
+      const targets = document.querySelectorAll('a-entity[always-face-camera]');
+      targets.forEach(target => target.parentNode.removeChild(target));
+      for (let i = 0; i < 5; i++) {
+        spawnTarget();
+      }
+
+      // Reset UI text
+      updateScore();
+      updateBallsUsed();
+
+      // Restart timer
+      startTimer();
+    }
+
+    function startTimer() {
+      const timerInterval = setInterval(function () {
+        timeLeft--;
+        const timerText = document.getElementById('timer');
+        timerText.setAttribute('value', 'Time: ' + timeLeft);
+
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          endGame();
+        }
+      }, 1000);
+    }
+
+    // Call startTimer() when initializing the game
+    startTimer();
+  </script>
+</body>
+
+</html> -->
+
+
+<!DOCTYPE html>
+<html>
+
+<head>
+  <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+  <script>
+    AFRAME.registerComponent('ar-shooter', {
+      init: function () {
+        this.camera = document.querySelector('a-entity[camera]');
+        this.setupGameElements();
+        this.setupEventListeners();
+        this.setupGameLogic();
+      },
+
+      setupGameElements: function () {
+        // Add game UI elements
+        const scene = this.el.sceneEl;
+        scene.appendChild(this.createText('timer', 'Time: 60', '-1 0.5 -1'));
+        scene.appendChild(this.createText('score', 'Score: 0', '0 0.5 -1'));
+        scene.appendChild(this.createText('ballsUsed', 'Balls Used: 0', '1 0.5 -1'));
+        scene.appendChild(this.createText('timeUp', 'Time Up!', '0 0 -1', false));
+        scene.appendChild(this.createText('finalScore', '', '0 -0.2 -1', false));
+      },
+
+      createText: function (id, value, position, visible = true) {
+        const text = document.createElement('a-text');
+        text.setAttribute('id', id);
+        text.setAttribute('value', value);
+        text.setAttribute('position', position);
+        text.setAttribute('color', '#FFF');
+        text.setAttribute('scale', '0.5 0.5 0.5');
+        text.setAttribute('visible', visible);
+        return text;
+      },
+
+      setupEventListeners: function () {
+        window.addEventListener('click', () => this.shootBall());
+      },
+
+      setupGameLogic: function () {
+        this.score = 0;
+        this.ballsUsed = 0;
+        this.timeLeft = 60;
+        this.gameActive = true;
+        this.maxBalls = 10;
+        this.ballPool = this.createBallPool();
+        this.lastShotTime = 0;
+        this.shootCooldown = 200;
+
+        this.spawnInitialTargets();
+        this.startTimer();
+      },
+
+      createBallPool: function () {
+        const ballPool = [];
+        for (let i = 0; i < this.maxBalls; i++) {
+          const ball = document.createElement('a-sphere');
+          ball.setAttribute('radius', '0.05');
+          ball.setAttribute('color', '#6c75e0');
+          ball.setAttribute('visible', 'false');
+          this.el.sceneEl.appendChild(ball);
+          ballPool.push(ball);
+        }
+        return ballPool;
+      },
+
+      spawnInitialTargets: function () {
+        for (let i = 0; i < 5; i++) {
+          this.spawnTarget();
+        }
+      },
+
+      spawnTarget: function () {
+        const target = document.createElement('a-entity');
+        const image = document.createElement('a-image');
+        image.setAttribute('src', 'ASSETS/icon-128.png');
+        image.setAttribute('width', '0.5');
+        image.setAttribute('height', '0.5');
+        target.appendChild(image);
+
+        const position = this.getRandomPosition();
+        target.setAttribute('position', position);
+
+        target.setAttribute('look-at', '[camera]');
+        this.el.sceneEl.appendChild(target);
+      },
+
+      getRandomPosition: function () {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = Math.random() * 3 + 2;
+        const x = Math.cos(angle) * radius;
+        const y = Math.random() * 2 - 1;
+        const z = Math.sin(angle) * radius;
+        return `${x} ${y} ${z}`;
+      },
+
+      shootBall: function () {
+        if (!this.gameActive) return;
+
+        const currentTime = new Date().getTime();
+        if (currentTime - this.lastShotTime < this.shootCooldown) return;
+        this.lastShotTime = currentTime;
+
+        this.ballsUsed++;
+        this.updateBallsUsed();
+
+        const ball = this.getAvailableBall();
+        if (!ball) return;
+
+        const cameraPosition = new THREE.Vector3();
+        const cameraRotation = new THREE.Euler();
+        this.camera.object3D.getWorldPosition(cameraPosition);
+        this.camera.object3D.getWorldRotation(cameraRotation);
+
+        const direction = new THREE.Vector3(0, 0, -1);
+        direction.applyEuler(cameraRotation);
+
+        ball.setAttribute('position', cameraPosition);
+        ball.setAttribute('visible', 'true');
+
+        this.moveBall(ball, cameraPosition, direction);
+      },
+
+      getAvailableBall: function () {
+        return this.ballPool.find(ball => !ball.getAttribute('visible'));
+      },
+
+      moveBall: function (ball, startPosition, direction) {
+        const position = startPosition.clone();
+        const raycaster = new THREE.Raycaster();
+
+        const animate = () => {
+          if (!this.gameActive) {
+            ball.setAttribute('visible', 'false');
+            return;
+          }
+
+          position.add(direction.clone().multiplyScalar(0.1));
+          ball.setAttribute('position', position);
+
+          raycaster.set(position, direction);
+          const intersects = raycaster.intersectObjects(this.el.sceneEl.object3D.children, true);
+
+          if (intersects.length > 0) {
+            const hitObject = intersects[0].object.el;
+            if (hitObject && hitObject.tagName === 'A-IMAGE') {
+              const targetEntity = hitObject.parentNode;
+              targetEntity.parentNode.removeChild(targetEntity);
+              ball.setAttribute('visible', 'false');
+              this.updateScore();
+              this.spawnTarget();
+              return;
+            }
+          }
+
+          if (position.length() > 10) {
+            ball.setAttribute('visible', 'false');
+            return;
+          }
+
+          requestAnimationFrame(animate);
+        };
+
+        requestAnimationFrame(animate);
+      },
+
+      updateScore: function () {
+        this.score++;
+        const scoreText = document.getElementById('score');
+        scoreText.setAttribute('value', 'Score: ' + this.score);
+      },
+
+      updateBallsUsed: function () {
+        const ballsUsedText = document.getElementById('ballsUsed');
+        ballsUsedText.setAttribute('value', 'Balls Used: ' + this.ballsUsed);
+      },
+
+      startTimer: function () {
+        const timerInterval = setInterval(() => {
+          this.timeLeft--;
+          const timerText = document.getElementById('timer');
+          timerText.setAttribute('value', 'Time: ' + this.timeLeft);
+
+          if (this.timeLeft <= 0) {
+            clearInterval(timerInterval);
+            this.endGame();
+          }
+        }, 1000);
+      },
+
+      endGame: function () {
+        this.gameActive = false;
+
+        document.getElementById('timer').setAttribute('visible', 'false');
+        document.getElementById('score').setAttribute('visible', 'false');
+        document.getElementById('ballsUsed').setAttribute('visible', 'false');
+
+        const targets = document.querySelectorAll('a-entity[look-at]');
+        targets.forEach(target => target.setAttribute('visible', 'false'));
+        this.ballPool.forEach(ball => ball.setAttribute('visible', 'false'));
+
+        const timeUpText = document.getElementById('timeUp');
+        timeUpText.setAttribute('visible', 'true');
+
+        const finalScoreText = document.getElementById('finalScore');
+        finalScoreText.setAttribute('value', 'Final Score: ' + this.score);
+        finalScoreText.setAttribute('visible', 'true');
+      }
+    });
+  </script>
+</head>
+
+<body style="margin: 0; overflow: hidden;">
+  <a-scene embedded
+    arjs="sourceType: webcam; debugUIEnabled: false;"
+    vr-mode-ui="enabled: false">
+    <a-camera>
+      <a-entity cursor="fuse: false; fuseTimeout: 500"
+        position="0 0 -1"
+        geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03"
+        material="color: red; shader: flat">
+      </a-entity>
+    </a-camera>
+    <a-entity ar-shooter></a-entity>
+  </a-scene>
+</body>
+
+</html>
