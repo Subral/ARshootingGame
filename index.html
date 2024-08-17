@@ -5,36 +5,29 @@
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://aframe.io/releases/1.6.0/aframe-ar.js"></script>
   <script>
-    AFRAME.registerComponent('device-motion-controls', {
-      init: function () {
-        this.acceleration = new THREE.Vector3(0, 0, 0);
-        this.velocity = new THREE.Vector3(0, 0, 0);
-        this.position = new THREE.Vector3(0, 2, 10);
 
-        window.addEventListener('devicemotion', (event) => {
-          this.acceleration.x = event.accelerationIncludingGravity.x * 0.1;
-          this.acceleration.z = -event.accelerationIncludingGravity.y * 0.1;
-        });
-      },
 
-      tick: function (time, deltaTime) {
-        // Update velocity
-        this.velocity.add(this.acceleration);
+    function spawnExplosion(position) {
+      const explosion = document.createElement('a-entity');
+      explosion.setAttribute('position', position);
+      explosion.setAttribute('scale', '10 10 10');
 
-        // Apply some damping
-        this.velocity.multiplyScalar(0.95);
+      const plane = document.createElement('a-image');
+      plane.setAttribute('material', {
+        src: 'ASSETS/Destroy-Bomb-Blast-GIF-by-send-unscreen.gif',
+        transparent: true,
+      });
+      plane.setAttribute('look-at', '[camera]');
 
-        // Update position
-        this.position.add(this.velocity);
+      explosion.appendChild(plane);
+      document.querySelector('a-scene').appendChild(explosion);
 
-        // Constrain movement to a certain area
-        this.position.x = THREE.MathUtils.clamp(this.position.x, -10, 10);
-        this.position.z = THREE.MathUtils.clamp(this.position.z, -10, 30);
+      setTimeout(() => {
+        explosion.parentNode.removeChild(explosion);
+      }, 1000);
+    }
 
-        // Update camera position
-        this.el.setAttribute('position', this.position);
-      }
-    });
+
 
 
     AFRAME.registerComponent('always-face-camera', {
@@ -95,6 +88,17 @@
 
 <body>
   <a-scene>
+
+    <a-assets>
+      <video id="camFeed"
+        autoplay
+        playsinline="true"
+        webkit-playsinline="true"></video>
+    </a-assets>
+
+    <a-videosphere src="#camFeed"></a-videosphere>
+
+
     <a-text id="timer"
       value="Time: 60"
       position="-3 7 -2"
@@ -124,7 +128,7 @@
       width="20"
       align="center"
       visible="false"></a-text>
-    <a-sky src="ASSETS/sky.jpg"></a-sky>
+    
 
     <a-entity camera
       look-controls
@@ -139,6 +143,17 @@
   </a-scene>
 
   <script>
+
+
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then((stream) => {
+        const video = document.querySelector('#camFeed');
+        video.srcObject = stream;
+      })
+      .catch((err) => {
+        console.error('Error accessing the camera: ' + err);
+      });
+
     let score = 0;
     let ballsUsed = 0;
     let timeLeft = 60;
@@ -263,6 +278,11 @@
             const hitObject = intersects[0].object.el;
             if (hitObject && (hitObject.tagName === 'A-IMAGE' || hitObject.tagName === 'A-ENTITY')) {
               const targetEntity = hitObject.tagName === 'A-IMAGE' ? hitObject.parentNode : hitObject;
+              const targetPosition = targetEntity.getAttribute('position');
+
+              // Spawn explosion at the target's position
+              spawnExplosion(targetPosition);
+
               targetEntity.parentNode.removeChild(targetEntity);
               ball.setAttribute('visible', 'false');
               updateScore();
