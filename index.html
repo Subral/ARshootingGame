@@ -4,30 +4,33 @@
 <head>
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://aframe.io/releases/1.6.0/aframe-ar.js"></script>
+  <script src="https://rawgit.com/mayognaise/aframe-gif-shader/master/dist/aframe-gif-shader.min.js"></script>
+  <style>
+    /* Make sure the video element is hidden */
+    #videoFeed {
+      display: none;
+    }
+  </style>
   <script>
-
 
     function spawnExplosion(position) {
       const explosion = document.createElement('a-entity');
       explosion.setAttribute('position', position);
-      explosion.setAttribute('scale', '10 10 10');
+      explosion.setAttribute('scale', '7 7 7'); // Adjust scale to fit the GIF size
 
-      const plane = document.createElement('a-image');
-      plane.setAttribute('material', {
-        src: 'ASSETS/Destroy-Bomb-Blast-GIF-by-send-unscreen.gif',
-        transparent: true,
-      });
+      const plane = document.createElement('a-video');
+      plane.setAttribute('src', 'ASSETS/blast.webm');
       plane.setAttribute('look-at', '[camera]');
+      plane.setAttribute('autoplay', 'true');
+      plane.setAttribute('loop', 'false'); // Set to 'false' if you don't want looping
 
       explosion.appendChild(plane);
       document.querySelector('a-scene').appendChild(explosion);
 
       setTimeout(() => {
         explosion.parentNode.removeChild(explosion);
-      }, 1000);
+      }, 2000); // Adjust to the length of your GIF or video
     }
-
-
 
 
     AFRAME.registerComponent('always-face-camera', {
@@ -88,15 +91,18 @@
 
 <body>
   <a-scene>
-
     <a-assets>
-      <video id="camFeed"
+      <video id="cameraFeed"
         autoplay
         playsinline="true"
-        webkit-playsinline="true"></video>
+        muted></video>
     </a-assets>
 
-    <a-videosphere src="#camFeed"></a-videosphere>
+
+    <a-sky src="#cameraFeed"
+      radius="1000"
+      material="shader:flat;"></a-sky>
+
 
 
     <a-text id="timer"
@@ -128,7 +134,7 @@
       width="20"
       align="center"
       visible="false"></a-text>
-    
+
 
     <a-entity camera
       look-controls
@@ -145,14 +151,19 @@
   <script>
 
 
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then((stream) => {
-        const video = document.querySelector('#camFeed');
+    async function startCamera() {
+      try {
+        // Access the camera
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const video = document.getElementById('cameraFeed');
         video.srcObject = stream;
-      })
-      .catch((err) => {
-        console.error('Error accessing the camera: ' + err);
-      });
+        video.play();
+      } catch (err) {
+        console.error('Error accessing the camera: ', err);
+      }
+    }
+
+    startCamera();
 
     let score = 0;
     let ballsUsed = 0;
