@@ -92,17 +92,16 @@
 <body>
   <a-scene>
     <a-assets>
-      <video id="cameraFeed"
-        autoplay
-        playsinline="true"
-        muted></video>
+      <video id="cameraFeed" autoplay playsinline="true" muted crossorigin="anonymous"></video>
+
     </a-assets>
 
 
-    <a-sky src="#cameraFeed"
+    <!-- <a-sky src="#cameraFeed"
       radius="1000"
-      material="shader:flat;"></a-sky>
+      material="shader:flat;"></a-sky> -->
 
+      <a-sky material="src: #cameraFeed; shader: flat;" radius="1000"></a-sky>
 
 
     <a-text id="timer"
@@ -151,17 +150,35 @@
   <script>
 
 
+    // async function startCamera() {
+    //   try {
+    //     // Access the camera
+    //     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    //     const video = document.getElementById('cameraFeed');
+    //     video.srcObject = stream;
+    //     video.play();
+    //   } catch (err) {
+    //     console.error('Error accessing the camera: ', err);
+    //   }
+    // }
+
     async function startCamera() {
-      try {
-        // Access the camera
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        const video = document.getElementById('cameraFeed');
-        video.srcObject = stream;
-        video.play();
-      } catch (err) {
-        console.error('Error accessing the camera: ', err);
-      }
-    }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    const video = document.getElementById('cameraFeed');
+    video.srcObject = stream;
+    video.play();
+
+    // Ensure the sky is updated after the camera starts
+    const sky = document.querySelector('a-sky');
+    sky.setAttribute('material', 'src: #cameraFeed; shader: flat;');
+  } catch (err) {
+    console.error('Error accessing the camera: ', err);
+  }
+}
+
+startCamera();
+
 
     startCamera();
 
